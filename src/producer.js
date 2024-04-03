@@ -1,38 +1,35 @@
-// read from stdin and send to kafka and print back to console
-// change it to a functions and publish to kafka
-const { kafka } = require("../utils/kafka");
-const readline = require("readline");
+const { kafka } = require("../utils/kafka"); //import kafka configs 
+const WebSocket = require('ws');
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const producer = kafka.producer(); // Create kafka producer
+const kafka_topic = "message_from_ws"; //kafka topic is used to send message to producer and when consuming we use the same topic name
+const ws = new WebSocket('ws://localhost:443/') ;
 
+//connect to kafka producer
 async function init() {
-  const producer = kafka.producer();
-
   console.log("Connecting Producer");
   await producer.connect();
   console.log("Producer Connected Successfully");
-
-  rl.setPrompt("> ");
-  rl.prompt();
-
-  rl.on("line", async function (line) {
-    const [riderName, location] = line.split(" ");
-    await producer.send({
-      topic: "rider-updates",
-      messages: [
-        {
-          partition: location.toLowerCase() === "north" ? 0 : 1,
-          key: "location-update",
-          value: JSON.stringify({ name: riderName, location }),
-        },
-      ],
-    });
-  }).on("close", async () => {
-    await producer.disconnect();
-  });
 }
-
 init();
+
+ws.on('open', function() {
+  console.log('connected to ws');
+})
+
+//When message is received from websocket server , then send it to kafka using producer and topic
+ws.on('message', function sendMessage(event) {
+  console.log('received message from server' , event.data);
+  sendMessageToKafka(event.data);
+})
+
+async function sendMessageToKafka(message) {
+  try {
+    await producer.send({
+      topic: kafka_topic,
+      messages: [{value: message}]
+    })
+  } catch (error) {
+    console.log('Could not send message to kafka', error);
+  }
+}
